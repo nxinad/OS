@@ -1,199 +1,270 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <math.h>
-#include <stdbool.h>
+#define arrival			0
+#define execution 		1
+#define deadline		2
+#define period			3
+#define abs_arrival		4
+#define execution_copy  5
+#define abs_deadline	6
 
-#define MAX_PROCESS 10
 
-int num_of_process = 3, count, remain, time_quantum;
-int execution_time[MAX_PROCESS], period[MAX_PROCESS], remain_time[MAX_PROCESS], deadline[MAX_PROCESS], remain_deadline[MAX_PROCESS];
-int burst_time[MAX_PROCESS], wait_time[MAX_PROCESS], completion_time[MAX_PROCESS], arrival_time[MAX_PROCESS];
-
-// collecting details of processes
-void get_process_info(int selected_algo)
+typedef struct
 {
-    printf("Enter total number of processes (maximum %d): ", MAX_PROCESS);
-    scanf("%d", &num_of_process);
-    if (num_of_process < 1)
-    {
-        printf("Do you really want to schedule %d processes? -_-", num_of_process);
-        exit(0);
-    }
-    if (selected_algo == 2)
-    {
-        printf("\nEnter Time Quantum: ");
-        scanf("%d", &time_quantum);
-        if (time_quantum < 1)
-        {
-            printf("Invalid Input: Time quantum should be greater than 0\n");
-            exit(0);
-        }
-    }
+	int T[7],instance,alive;
 
-    for (int i = 0; i < num_of_process; i++)
-    {
-        printf("\nProcess %d:\n", i + 1);
-        if (selected_algo == 1)
-        {
-            printf("==> Burst time: ");
-            scanf("%d", &burst_time[i]);
-        }
-        else if (selected_algo == 2)
-        {
-            printf("=> Arrival Time: ");
-            scanf("%d", &arrival_time[i]);
-            printf("=> Burst Time: ");
-            scanf("%d", &burst_time[i]);
-            remain_time[i] = burst_time[i];
-        }
-        else if (selected_algo > 2)
-        {
-            printf("==> Execution time: ");
-            scanf("%d", &execution_time[i]);
-            remain_time[i] = execution_time[i];
-            if (selected_algo == 4)
-            {
-                printf("==> Deadline: ");
-                scanf("%d", &deadline[i]);
-            }
-            else
-            {
-                printf("==> Period: ");
-                scanf("%d", &period[i]);
-            }
-        }
-    }
+}task;
+
+#define IDLE_TASK_ID 1023   
+#define ALL 1
+#define CURRENT 0
+
+void get_tasks(task *t1,int n);				
+int hyperperiod_calc(task *t1,int n);		
+float cpu_util(task *t1,int n);				
+int gcd(int a, int b);					
+int lcm(int *a, int n);					
+int sp_interrupt(task *t1,int tmr,int n);		
+int min(task *t1,int n,int p);				
+void update_abs_arrival(task *t1,int n,int k,int all);	
+void update_abs_deadline(task *t1,int n,int all);	
+void copy_execution_time(task *t1,int n,int all);	
+
+
+int timer = 0;
+
+int main()
+{
+	task *t;
+	int n, hyper_period, active_task_id;
+	float cpu_utilization;
+	printf("Enter number of tasks\n");
+	scanf("%d", &n);
+	t = malloc(n * sizeof(task));
+	get_tasks(t, n);
+	cpu_utilization = cpu_util(t, n);
+	printf("CPU Utilization %f\n", cpu_utilization);
+
+	if (cpu_utilization < 1)
+		printf("Tasks can be scheduled\n");
+	else
+		printf("Schedule is not feasible\n");
+
+	hyper_period = hyperperiod_calc(t, n);
+	copy_execution_time(t, n, ALL);
+	update_abs_arrival(t, n, 0, ALL);
+	update_abs_deadline(t, n, ALL);
+
+	while (timer <= hyper_period)
+	{
+
+		if (sp_interrupt(t, timer, n))
+		{
+			active_task_id = min(t, n, abs_deadline);
+		}
+
+		if (active_task_id == IDLE_TASK_ID)
+		{
+			printf("%d  Idle\n", timer);
+		}
+
+		if (active_task_id != IDLE_TASK_ID)
+		{
+
+			if (t[active_task_id].T[execution_copy] != 0)
+			{
+				t[active_task_id].T[execution_copy]--;
+				printf("%d  Task %d\n", timer, active_task_id + 1);
+			}
+
+			if (t[active_task_id].T[execution_copy] == 0)
+			{
+				t[active_task_id].instance++;
+				t[active_task_id].alive = 0;
+				copy_execution_time(t, active_task_id, CURRENT);
+				update_abs_arrival(t, active_task_id, t[active_task_id].instance, CURRENT);
+				update_abs_deadline(t, active_task_id, CURRENT);
+				active_task_id = min(t, n, abs_deadline);
+			}
+		}
+		++timer;
+	}
+	free(t);
+	return 0;
+}
+void get_tasks(task *t1, int n)
+{
+	int i = 0;
+	while (i < n)
+	{
+		printf("Enter Task %d parameters\n", i + 1);
+		printf("Arrival time: ");
+		scanf("%d", &t1->T[arrival]);
+		printf("Execution time: ");
+		scanf("%d", &t1->T[execution]);
+		printf("Deadline time: ");
+		scanf("%d", &t1->T[deadline]);
+		printf("Period: ");
+		scanf("%d", &t1->T[period]);
+		t1->T[abs_arrival] = 0;
+		t1->T[execution_copy] = 0;
+		t1->T[abs_deadline] = 0;
+		t1->instance = 0;
+		t1->alive = 0;
+		t1++;
+		i++;
+	}
 }
 
-// get maximum of three numbers
-int max(int a, int b, int c)
+int hyperperiod_calc(task *t1, int n)
 {
-    int max;
-    if (a >= b && a >= c)
-        max = a;
-    else if (b >= a && b >= c)
-        max = b;
-    else if (c >= a && c >= b)
-        max = c;
-    return max;
+	int i = 0, ht, a[10];
+	while (i < n)
+
+	{
+		a[i] = t1->T[period];
+		t1++;
+		i++;
+	}
+	ht = lcm(a, n);
+
+	return ht;
 }
 
-// calculating the observation time for scheduling timeline
-int get_observation_time(int selected_algo)
+int gcd(int a, int b)
 {
-    if (selected_algo < 3)
-    {
-        int sum = 0;
-        for (int i = 0; i < num_of_process; i++)
-        {
-            sum += burst_time[i];
-        }
-        return sum;
-    }
-    else if (selected_algo == 3)
-    {
-        return max(period[0], period[1], period[2]);
-    }
-    else if (selected_algo == 4)
-    {
-        return max(deadline[0], deadline[1], deadline[2]);
-    }
+	if (b == 0)
+		return a;
+	else
+		return gcd(b, a % b);
 }
 
-// print scheduling sequence
-void print_schedule(int process_list[], int cycles)
+int lcm(int *a, int n)
 {
-    printf("\nScheduling:\n\n");
-    printf("Time: ");
-    for (int i = 0; i < cycles; i++)
-    {
-        if (i < 10)
-            printf("| 0%d ", i);
-        else
-            printf("| %d ", i);
-    }
-    printf("|\n");
-
-    for (int i = 0; i < num_of_process; i++)
-    {
-        printf("P[%d]: ", i + 1);
-        for (int j = 0; j < cycles; j++)
-        {
-            if (process_list[j] == i + 1)
-                printf("|####");
-            else
-                printf("|    ");
-        }
-        printf("|\n");
-    }
+	int res = 1, i;
+	for (i = 0; i < n; i++)
+	{
+		res = res * a[i] / gcd(res, a[i]);
+	}
+	return res;
 }
 
-void rate_monotonic(int time)
+int sp_interrupt(task *t1, int tmr, int n)
 {
-    int process_list[100] = {0}, min = 999, next_process = 0;
-    float utilization = 0;
-    for (int i = 0; i < num_of_process; i++)
-    {
-        utilization += (1.0 * execution_time[i]) / period[i];
-    }
-    int n = num_of_process;
-    if (utilization > n * (pow(2, 1.0 / n) - 1))
-    {
-        printf("\nGiven problem is not schedulable under the said scheduling algorithm.\n");
-        exit(0);
-    }
+	int i = 0, n1 = 0, a = 0;
+	task *t1_copy;
+	t1_copy = t1;
+	while (i < n)
+	{
+		if (tmr == t1->T[abs_arrival])
+		{
+			t1->alive = 1;
+			a++;
+		}
+		t1++;
+		i++;
+	}
 
+	t1 = t1_copy;
+	i = 0;
 
-    for (int i = 0; i < time; i++)
-    {
-        min = 1000;
-        for (int j = 0; j < num_of_process; j++)
-        {
-            if (remain_time[j] > 0)
-            {
-                if (min > period[j])
-                {
-                    min = period[j];
-                    next_process = j;
-                }
-            }
-        }
+	while (i < n)
+	{
+		if (t1->alive == 0)
+			n1++;
+		t1++;
+		i++;
+	}
 
-        if (remain_time[next_process] > 0)
-        {
-            process_list[i] = next_process + 1; // +1 for catering 0 array index.
-            remain_time[next_process] -= 1;
-        }
+	if (n1 == n || a != 0)
+	{
+		return 1;
+	}
 
-        for (int k = 0; k < num_of_process; k++)
-        {
-            if ((i + 1) % period[k] == 0)
-            {
-                remain_time[k] = execution_time[k];
-                next_process = k;
-            }
-        }
-    }
-    print_schedule(process_list, time);
+	return 0;
 }
 
-
-
-int main(int argc, char *argv[])
+void update_abs_deadline(task *t1, int n, int all)
 {
-    int option = 0;
+	int i = 0;
+	if (all)
+	{
+		while (i < n)
+		{
+			t1->T[abs_deadline] = t1->T[deadline] + t1->T[abs_arrival];
+			t1++;
+			i++;
+		}
+	}
+	else
+	{
+		t1 += n;
+		t1->T[abs_deadline] = t1->T[deadline] + t1->T[abs_arrival];
+	}
+}
 
-    printf("3. Rate Monotonic Scheduling\n");
+void update_abs_arrival(task *t1, int n, int k, int all)
+{
+	int i = 0;
+	if (all)
+	{
+		while (i < n)
+		{
+			t1->T[abs_arrival] = t1->T[arrival] + k * (t1->T[period]);
+			t1++;
+			i++;
+		}
+	}
+	else
+	{
+		t1 += n;
+		t1->T[abs_arrival] = t1->T[arrival] + k * (t1->T[period]);
+	}
+}
 
-    printf("Select > ");
-    scanf("%d", &option);
-    printf("-----------------------------\n");
+void copy_execution_time(task *t1, int n, int all)
+{
+	int i = 0;
+	if (all)
+	{
+		while (i < n)
+		{
+			t1->T[execution_copy] = t1->T[execution];
+			t1++;
+			i++;
+		}
+	}
+	else
+	{
+		t1 += n;
+		t1->T[execution_copy] = t1->T[execution];
+	}
+}
 
-    get_process_info(option); // collecting processes detail
-    int observation_time = get_observation_time(option);
+int min(task *t1, int n, int p)
+{
+	int i = 0, min = 0x7FFF, task_id = IDLE_TASK_ID;
+	while (i < n)
+	{
+		if (min > t1->T[p] && t1->alive == 1)
+		{
+			min = t1->T[p];
+			task_id = i;
+		}
+		t1++;
+		i++;
+	}
+	return task_id;
+}
 
-
-     if (option == 3)
-        rate_monotonic(observation_time);
-    return 0;
+float cpu_util(task *t1, int n)
+{
+	int i = 0;
+	float cu = 0;
+	while (i < n)
+	{
+		cu = cu + (float)t1->T[execution] / (float)t1->T[deadline];
+		t1++;
+		i++;
+	}
+	return cu;
 }
