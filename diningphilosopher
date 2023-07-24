@@ -1,58 +1,70 @@
-v#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <pthread.h>
 
-#define NUM_PHILOSOPHERS 5
-#define NUM_CHOPSTICKS 5
+int mutex = 1;
+int full = 0;
+int empty = 10, x = 0;
 
-pthread_mutex_t chopsticks[NUM_CHOPSTICKS];
-
-void* philosopher(void* philosopher_id) {
-    int left_chopstick = (int)(intptr_t)philosopher_id;
-    int right_chopstick = (left_chopstick + 1) % NUM_PHILOSOPHERS;
-
-    while (1) {
-        printf("Philosopher %d is thinking.\n", left_chopstick);
-        sleep(1);
-
-        // Pick up chopsticks
-        pthread_mutex_lock(&chopsticks[left_chopstick]);
-        pthread_mutex_lock(&chopsticks[right_chopstick]);
-
-        printf("Philosopher %d is eating.\n", left_chopstick);
-        sleep(1);
-
-        // Put down chopsticks
-        pthread_mutex_unlock(&chopsticks[right_chopstick]);
-        pthread_mutex_unlock(&chopsticks[left_chopstick]);
-    }
-
-    return NULL;
+void producer()
+{
+	--mutex;
+	++full;
+	--empty;
+	x++;
+	printf("\nProducer produces item %d",
+		x);
+	++mutex;
 }
 
-int main() {
-    pthread_t philosophers[NUM_PHILOSOPHERS];
+void consumer()
+{
+	--mutex;
+	--full;
+	++empty;
+	printf("\nConsumer consumes item %d",
+		x);
+	x--;
+	++mutex;
+}
 
-    // Initialize the mutexes (chopsticks)
-    for (int i = 0; i < NUM_CHOPSTICKS; i++) {
-        pthread_mutex_init(&chopsticks[i], NULL);
-    }
+int main()
+{
+	int n, i;
+	printf("\n1. Press 1 for Producer"
+		"\n2. Press 2 for Consumer"
+		"\n3. Press 3 for Exit");
 
-    // Create philosopher threads
-    for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
-        pthread_create(&philosophers[i], NULL, philosopher, (void*)(intptr_t)i);
-    }
+#pragma omp critical
 
-    // Wait for philosopher threads to finish (This will not happen in this example)
-    for (int i = 0; i < NUM_PHILOSOPHERS; i++) {
-        pthread_join(philosophers[i], NULL);
-    }
+	for (i = 1; i > 0; i++) {
 
-    // Destroy the mutexes (chopsticks)
-    for (int i = 0; i < NUM_CHOPSTICKS; i++) {
-        pthread_mutex_destroy(&chopsticks[i]);
-    }
+		printf("\nEnter your choice:");
+		scanf("%d", &n);
 
-    return 0;
+		switch (n) {
+		case 1:
+			if ((mutex == 1)
+				&& (empty != 0)) {
+				producer();
+			}
+			else {
+				printf("Buffer is full!");
+			}
+			break;
+
+		case 2:
+			if ((mutex == 1)
+				&& (full != 0)) {
+				consumer();
+			}
+			else {
+				printf("Buffer is empty!");
+			}
+			break;
+
+		case 3:
+			exit(0);
+			break;
+		}
+	}
 }
